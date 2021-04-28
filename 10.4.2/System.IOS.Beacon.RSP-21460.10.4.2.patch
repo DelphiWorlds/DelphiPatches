@@ -1,0 +1,29 @@
+diff --git "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\rtl\\net\\System.IOS.Beacon.pas" "b/Z:\\Patches\\Private\\Delphi\\10.4.2\\System.IOS.Beacon.pas"
+index 509ceff..aebaee0 100644
+--- "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\rtl\\net\\System.IOS.Beacon.pas"	
++++ "b/Z:\\Patches\\Private\\Delphi\\10.4.2\\System.IOS.Beacon.pas"
+@@ -301,7 +301,12 @@ end;
+ procedure TBeaconLocationManagerDelegate.locationManagerDidDetermineStateForRegion(manager: CLLocationManager; state: CLRegionState;
+   region: CLRegion);
+ begin
+-  // For debug purposes
++  // PATCH https://quality.embarcadero.com/browse/RSP-21460 start
++  if state = CLRegionStateInside then
++    manager.startRangingBeaconsInRegion(TCLBeaconRegion.Wrap(NSObjectToID(region)))
++  else if state = CLRegionStateOutside then
++    manager.stopRangingBeaconsInRegion(TCLBeaconRegion.Wrap(NSObjectToID(region)));
++  // PATCH https://quality.embarcadero.com/browse/RSP-21460 end
+ end;
+ 
+ procedure TBeaconLocationManagerDelegate.locationManagerDidEnterRegion(manager: CLLocationManager; region: CLRegion);
+@@ -1562,7 +1567,9 @@ begin
+   else if (Major <> MAJOR_REGION_ALL) and (Minor = MINOR_REGION_ALL) then
+     Result := TCLBeaconRegion.Wrap(TCLBeaconRegion.Alloc.initWithProximityUUIDMajorIdentifier(LNSUUID, Major, StrToNSStr(LIniGUID)))
+   else
+-    Result := TCLBeaconRegion.Wrap(TCLBeaconRegion.Alloc.initWithProximityUUIDMajorMinorIdentifier(LNSUUID, Major, Minor, StrToNSStr(LIniGUID)))
++    Result := TCLBeaconRegion.Wrap(TCLBeaconRegion.Alloc.initWithProximityUUIDMajorMinorIdentifier(LNSUUID, Major, Minor, StrToNSStr(LIniGUID)));
++  // PATCH https://quality.embarcadero.com/browse/RSP-21460
++  Result.setNotifyEntryStateOnDisplay(True);
+ end;
+ 
+ procedure TBeaconRegion.Initialilize(const AGUID: TGUID; AMajor, AMinor: Integer);
