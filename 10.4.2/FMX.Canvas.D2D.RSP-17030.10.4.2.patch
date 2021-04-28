@@ -1,0 +1,110 @@
+diff --git "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\fmx\\FMX.Canvas.D2D.pas" "b/Z:\\Patches\\Private\\Delphi\\10.4.2\\FMX.Canvas.D2D.pas"
+index 9bad476..e9341b7 100644
+--- "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\fmx\\FMX.Canvas.D2D.pas"	
++++ "b/Z:\\Patches\\Private\\Delphi\\10.4.2\\FMX.Canvas.D2D.pas"
+@@ -282,6 +282,31 @@ type
+     procedure ConvertToPath(const APath: TPathData); override;
+   end;
+ 
++// PATCH: https://quality.embarcadero.com/browse/RSP-17030 start
++const
++  SID_IDWriteGdiInterop1 = '{4556BE70-3ABD-4F70-90BE-421780A6F515}';
++
++type
++  IDWriteGdiInterop1 = interface(IDWriteGdiInterop)
++    [SID_IDWriteGdiInterop1]
++    function CreateFontFromLOGFONT(var logFont: LOGFONTW;
++      fontCollection : IDWriteFontCollection;
++      out font: IDWriteFont): HResult; stdcall;
++
++    function GetFontSignature(
++     font : IDWriteFont;
++     out fontSignatre : FONTSIGNATURE): HResult; stdcall; overload;
++
++    function GetFontSignature(
++     fontFace : IDWriteFontFace;
++     out fontSignatre : FONTSIGNATURE): HResult; stdcall; overload;
++
++    function GetMatchingFontsByLOGFONT(const logFont: LOGFONTW;
++      fontSet : IDWriteFont{IDWriteFontSet};
++      out  filteredSet : IDWriteFont {IDWriteFontSet}): HResult; stdcall;
++  end;
++// PATCH: https://quality.embarcadero.com/browse/RSP-17030 end
++
+ var
+   PrevFPUState: TArithmeticExceptionMask;
+ 
+@@ -2533,12 +2558,18 @@ var
+   Names: IDWriteLocalizedStrings;
+   LocaleName: array [0..LOCALE_NAME_MAX_LENGTH] of Char;
+   LDC: HDC;
++  // PATCH: https://quality.embarcadero.com/browse/RSP-17030 start
++  DWriteGDIInterop1: IDWriteGdiInterop1;
++  DWriteFontFace: IDWriteFontFace;
++  I: Integer;
++  LResult: HResult;
++  // PATCH: https://quality.embarcadero.com/browse/RSP-17030 end
+ begin
+   Result := TDWriteFontDescriptor.Create(AFont.Family, FontWeightToDWrite(AFont.StyleExt.Weight),
+     FontSlantToDWrite(AFont.StyleExt.Slant), FontStretchToDWrite(AFont.StyleExt.Stretch));
+ 
+   if FFontCollection = nil then
+-    TCanvasD2D.SharedDWriteFactory.GetSystemFontCollection(FFontCollection);
++    TCanvasD2D.SharedDWriteFactory.GetSystemFontCollection(FFontCollection, False); // PATCH: https://quality.embarcadero.com/browse/RSP-17030
+   FFontCollection.FindFamilyName(PChar(AFont.Family), FamilyIndex, FamilyExists);
+   if not FamilyExists then
+   begin
+@@ -2554,10 +2585,23 @@ begin
+         LDC := GetDC(0);
+         try
+           EnumFontFamiliesEx(LDC, LogFont, @EnumFontFamExProc, NativeInt(@LogFont), 0);
+-        finally
++          // PATCH: https://quality.embarcadero.com/browse/RSP-17030 start
++          DWriteFont := nil;
++          LResult := DWriteGdiInterop.CreateFontFaceFromHdc(LDC, DWriteFontFace);
++          if Succeeded(LResult) then
++          begin
++            FFontCollection.GetFontFromFontFace(DWriteFontFace, DWriteFont);
++            DWriteFontFace := nil;
++          end;
++          // PATCH: https://quality.embarcadero.com/browse/RSP-17030 end
++       finally
+           ReleaseDC(0, LDC);
+         end;
+-        if Succeeded(DWriteGdiInterop.CreateFontFromLOGFONT(LogFont, DWriteFont)) then
++        // PATCH: https://quality.embarcadero.com/browse/RSP-17030 start
++        // if Succeeded(DWriteGdiInterop.CreateFontFromLOGFONT(LogFont, DWriteFont)) then
++        DWriteGdiInterop1 := DWriteGdiInterop as IDWriteGdiInterop1;
++        if (DWriteFont <> nil) or Succeeded(DWriteGdiInterop1.CreateFontFromLOGFONT(LogFont, nil, DWriteFont)) then
++        // PATCH: https://quality.embarcadero.com/browse/RSP-17030 end
+         try
+           if Succeeded(DWriteFont.GetFontFamily(DWriteFamily)) then
+           try
+@@ -2669,8 +2713,13 @@ begin
+ 
+   FontDescriptor := GetFontStyles(Font);
+ 
+-  if Succeeded(TCanvasD2D.SharedDWriteFactory.CreateTextFormat(PChar(FontDescriptor.FamilyName), FFontCollection,
+-    FontDescriptor.Weight, FontDescriptor.Style, FontDescriptor.Stretch, Font.Size, PChar(FLocaleName), TextFormat)) then
++  // PATCH: https://quality.embarcadero.com/browse/RSP-17030 start
++  //  if Succeeded(TCanvasD2D.SharedDWriteFactory.CreateTextFormat(PChar(FontDescriptor.FamilyName), FFontCollection,
++  //    FontDescriptor.Weight, FontDescriptor.Style, FontDescriptor.Stretch, Font.Size, PChar(FLocaleName), TextFormat)) then
++
++  if Succeeded(TCanvasD2D.SharedDWriteFactory.CreateTextFormat(PChar(FontDescriptor.FamilyName), nil,
++    FontDescriptor.Weight, FontDescriptor.Style, FontDescriptor.Stretch, Font.Size,PChar(FLocaleName), TextFormat)) then
++  // PATCH: https://quality.embarcadero.com/browse/RSP-17030 end
+   try
+     if RightToLeft then
+       TextFormat.SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT)
+@@ -2762,7 +2811,10 @@ var
+   LFont: PLogFont;
+ begin
+   LFont := Pointer(lParam);
+-  Move(lpelfe, LFont^, SizeOf(TLogFont));
++  // PATCH: https://quality.embarcadero.com/browse/RSP-17030 start
++  LFont^ := lpelfe;
++  //Move(lpelfe, LFont^, SizeOf(TLogFont));
++  // PATCH: https://quality.embarcadero.com/browse/RSP-17030 end
+   Result := 0;
+ end;
+ 
