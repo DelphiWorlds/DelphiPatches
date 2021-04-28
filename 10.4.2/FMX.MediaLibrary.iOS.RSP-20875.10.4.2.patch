@@ -1,0 +1,117 @@
+diff --git "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\fmx\\FMX.MediaLibrary.iOS.pas" "b/Z:\\Patches\\Private\\Delphi\\10.4.2\\FMX.MediaLibrary.iOS.pas"
+index 77fce7c..d4a0498 100644
+--- "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\fmx\\FMX.MediaLibrary.iOS.pas"	
++++ "b/Z:\\Patches\\Private\\Delphi\\10.4.2\\FMX.MediaLibrary.iOS.pas"
+@@ -21,6 +21,8 @@ uses
+   System.SysUtils, System.Classes, System.Types, System.Math, System.Generics.Collections,
+   FMX.MediaLibrary, FMX.Types, FMX.Types3D, FMX.Controls,
+   FMX.Platform, FMX.Graphics, FMX.Helpers.iOS, iOSapi.MediaPlayer, iOSapi.Foundation, iOSapi.UIKit, iOSapi.CoreGraphics,
++  // PATCH https://quality.embarcadero.com/browse/RSP-20875
++  iOSapi.CocoaTypes,
+   Macapi.ObjectiveC, Macapi.Helpers, iOSapi.AssetsLibrary, System.TypInfo, Macapi.ObjCRuntime, FMX.Consts;
+ 
+ type
+@@ -67,6 +69,8 @@ type
+   TImageDelegate = class(TOCLocal, UIImagePickerControllerDelegate)
+   private
+     [Weak] FImageManager: TImageManagerCocoa;
++    // PATCH https://quality.embarcadero.com/browse/RSP-20875
++    FIsFullScreen: Boolean;
+     FParams: TParamsPhotoQuery;
+   protected
+     procedure DoDidFinishTaking(const AImage: TBitmap);
+@@ -75,6 +79,8 @@ type
+     function GetAngleOfImageOrientation(const AImage: UIImage): Single;
+   public
+     constructor Create(const AImageManager: TImageManagerCocoa);
++    // PATCH https://quality.embarcadero.com/browse/RSP-20875
++    property IsFullScreen: Boolean read FIsFullScreen write FIsFullScreen;
+     property Params: TParamsPhotoQuery read FParams write FParams;
+     { UIImagePickerControllerDelegate }
+     procedure imagePickerController(picker: UIImagePickerController; didFinishPickingImage: UIImage; editingInfo: NSDictionary); overload; cdecl;
+@@ -95,6 +101,40 @@ type
+     procedure Share(const AControl: TControl; const AText: string; const ABitmap: TBitmap);
+   end;
+ 
++// PATCH https://quality.embarcadero.com/browse/RSP-20875 start
++  IImagePickerController = interface(UIImagePickerController)
++    ['{B9BB3FA5-9C0D-4BFA-A905-6575B09A972E}']
++  end;
++
++  TImagePickerController = class(TOCLocal)
++  protected
++    function GetObjectiveCClass: PTypeInfo; override;
++  public
++    constructor Create;
++    function supportedInterfaceOrientations: NSUInteger; cdecl;
++  end;
++
++constructor TImagePickerController.Create;
++var
++  V: Pointer;
++begin
++  inherited;
++  V := UIImagePickerController(Super).init;
++  if GetObjectID <> V then
++    UpdateObjectID(V);
++end;
++
++function TImagePickerController.GetObjectiveCClass: PTypeInfo;
++begin
++  Result := TypeInfo(IImagePickerController);
++end;
++
++function TImagePickerController.supportedInterfaceOrientations: NSUInteger;
++begin
++  Result := SharedApplication.keyWindow.rootViewController.supportedInterfaceOrientations;
++end;
++// PATCH https://quality.embarcadero.com/browse/RSP-20875 end
++
+ procedure RegisterMediaLibraryServices;
+ var
+   ImageManager: TImageManagerCocoa;
+@@ -229,10 +269,15 @@ procedure TImageManagerCocoa.TakeImage(const AControl: TControl; const ASourceTy
+   procedure ShowPicker;
+   begin
+     // Camera for iPad is showed only in full screen on iPad and iPhone
+-    if not IsPad or (ASourceType = UIImagePickerControllerSourceTypeCamera) then
++    // PATCH https://quality.embarcadero.com/browse/RSP-20875 start
++    // If you want the picker to be full screen *always*, modify the next line to: FImageDelegate.IsFullScreen := True;
++    FImageDelegate.IsFullScreen := not IsPad or (ASourceType = UIImagePickerControllerSourceTypeCamera);
++    // if not IsPad or (ASourceType = UIImagePickerControllerSourceTypeCamera) then
++    if FImageDelegate.IsFullScreen then
+       ShowInFullScreen
+     else
+       ShowInPopover;
++    // PATCH https://quality.embarcadero.com/browse/RSP-20875 end
+   end;
+ 
+ begin
+@@ -243,7 +288,11 @@ begin
+       FImagePicker.setDelegate(nil);
+       FImagePicker.release;
+     end;
+-    FImagePicker := TUIImagePickerController.Create;
++
++    // PATCH https://quality.embarcadero.com/browse/RSP-20875 start
++    // FImagePicker := TUIImagePickerController.Create;
++    FImagePicker := UIImagePickerController(TImagePickerController.Create.Super);
++    // PATCH https://quality.embarcadero.com/browse/RSP-20875 end
+     FImagePicker.retain;
+     FImagePicker.setDelegate(FImageDelegate.GetObjectID);
+ 
+@@ -311,10 +360,13 @@ end;
+ 
+ procedure TImageDelegate.HidePicker(const APicker: UIImagePickerController);
+ begin
+-  if (FImageManager <> nil) and IsPad and (APicker.sourceType <> UIImagePickerControllerSourceTypeCamera) then
++  // PATCH https://quality.embarcadero.com/browse/RSP-20875 start
++  // if (FImageManager <> nil) and IsPad and (APicker.sourceType <> UIImagePickerControllerSourceTypeCamera) then
++  if (FImageManager <> nil) and not FIsFullScreen then
+     FImageManager.ClosePopover
+   else
+     APicker.dismissModalViewControllerAnimated(True);
++  // PATCH https://quality.embarcadero.com/browse/RSP-20875 end
+ end;
+ 
+ procedure TImageDelegate.imagePickerController(picker: UIImagePickerController; didFinishPickingImage: UIImage;
