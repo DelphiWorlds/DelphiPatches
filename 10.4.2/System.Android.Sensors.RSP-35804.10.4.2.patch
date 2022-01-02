@@ -1,7 +1,7 @@
-diff --git "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\rtl\\common\\System.Android.Sensors.pas" "b/Z:\\Clients\\SteveKramer\\LightWave2021\\Source\\System.Android.Sensors.pas"
+diff --git "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\rtl\\common\\System.Android.Sensors.pas" "b/Z:\\Patches\\Delphi\\10.4.2\\System.Android.Sensors.pas"
 index 330a6e7..75f33cb 100644
 --- "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\rtl\\common\\System.Android.Sensors.pas"	
-+++ "b/Z:\\Clients\\SteveKramer\\LightWave2021\\Source\\System.Android.Sensors.pas"
++++ "b/Z:\\Patches\\Delphi\\10.4.2\\System.Android.Sensors.pas"
 @@ -95,6 +95,16 @@ type
      class procedure Cancel; override;
    end;
