@@ -1,0 +1,100 @@
+diff --git "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\rtl\\common\\System.Android.Sensors.pas" "b/Z:\\Clients\\SteveKramer\\LightWave2021\\Source\\System.Android.Sensors.pas"
+index 330a6e7..75f33cb 100644
+--- "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\rtl\\common\\System.Android.Sensors.pas"	
++++ "b/Z:\\Clients\\SteveKramer\\LightWave2021\\Source\\System.Android.Sensors.pas"
+@@ -95,6 +95,16 @@ type
+     class procedure Cancel; override;
+   end;
+ 
++  // PATCH: https://quality.embarcadero.com/browse/RSP-35804   BEGIN
++  [JavaSignature('android/location/LocationListener')]
++  JLocationListenerEx = interface(Androidapi.JNI.Location.JLocationListener)
++    ['{5D5C6F82-08E9-4D0F-9D1D-14D2D5BD7710}']
++    procedure onLocationChanged(P1: JArrayList); overload; cdecl;
++    procedure onLocationChanged(P1: JLocation); overload; cdecl;
++    procedure onLocationChanged(P1: JObject); overload; cdecl;
++  end;
++  // PATCH: https://quality.embarcadero.com/browse/RSP-35804   END
++
+   TUIAndroidLocationSensor = class(TCustomLocationSensor)
+   private
+     FPermitted: Boolean;
+@@ -103,12 +113,19 @@ type
+     FAccuracy: TLocationAccuracy;
+     FDistance: TLocationDistance;
+     type
+-      TLocationListener = class(TJavaLocal, JLocationListener)
++      // PATCH: https://quality.embarcadero.com/browse/RSP-35804
++      // TLocationListener = class(TJavaLocal, JLocationListener)
++      TLocationListener = class(TJavaLocal, JLocationListener, JLocationListenerEx)
+       private
+         FLocationSensor: TUIAndroidLocationSensor;
+       public
+         constructor Create(ALocationSensor: TUIAndroidLocationSensor);
+-        procedure onLocationChanged(P1: JLocation); cdecl;
++        // PATCH: https://quality.embarcadero.com/browse/RSP-35804   BEGIN
++        // procedure onLocationChanged(P1: JLocation); cdecl;
++        procedure onLocationChanged(P1: JArrayList); overload; cdecl;
++        procedure onLocationChanged(P1: JLocation); overload; cdecl;
++        procedure onLocationChanged(P1: JObject); overload; cdecl;
++        // PATCH: https://quality.embarcadero.com/browse/RSP-35804   END
+         procedure onStatusChanged(P1: JString; P2: Integer; P3: JBundle); cdecl;
+         procedure onProviderEnabled(P1: JString); cdecl;
+         procedure onProviderDisabled(P1: JString); cdecl;
+@@ -978,6 +995,21 @@ begin
+   FLocationSensor := ALocationSensor;
+ end;
+ 
++// PATCH: https://quality.embarcadero.com/browse/RSP-35804   BEGIN
++procedure TUIAndroidLocationSensor.TLocationListener.onLocationChanged(P1: JArrayList);
++begin
++  onLocationChanged(TJLocation.Wrap(P1.get(P1.size - 1)));
++end;
++
++procedure TUIAndroidLocationSensor.TLocationListener.onLocationChanged(P1: JObject);
++begin
++  if TJNIResolver.IsInstanceOf(P1, TJArrayList.GetClsID) then
++    onLocationChanged(TJArrayList.Wrap(P1))
++  else if TJNIResolver.IsInstanceOf(P1, TJLocation.GetClsID) then
++    onLocationChanged(TJLocation.Wrap(P1));
++end;
++// PATCH: https://quality.embarcadero.com/browse/RSP-35804   END
++
+ procedure TUIAndroidLocationSensor.TLocationListener.onLocationChanged(P1: JLocation);
+ var
+   OldLocation, CurrentLocation: TLocationCoord2D;
+@@ -1033,7 +1065,9 @@ const
+   cMinTime = 100;
+   cMinDistance = 10;
+ begin
+-  FLocationManager.requestLocationUpdates( FProvider, cMinTime, cMinDistance, FListener);
++  // PATCH: https://quality.embarcadero.com/browse/RSP-35804   BEGIN
++  // FLocationManager.requestLocationUpdates( FProvider, cMinTime, cMinDistance, FListener);
++  FLocationManager.requestLocationUpdates( FProvider, cMinTime, cMinDistance, FListener as JLocationListener);
+ end;
+ 
+ { TUIAndroidLocationSensor }
+@@ -1140,12 +1174,20 @@ end;
+ procedure TUIAndroidLocationSensor.DoStop;
+ begin
+   inherited;
++  // PATCH: https://quality.embarcadero.com/browse/RSP-35804   BEGIN
++  // if FPassiveListener <> nil then
++  //   FLocationManager.removeUpdates(FPassiveListener);
++  // if FNetworkListener <> nil then
++  //   FLocationManager.removeUpdates(FNetworkListener);
++  // if FGPSListener <> nil then
++  //   FLocationManager.removeUpdates(FGPSListener);
+   if FPassiveListener <> nil then
+-    FLocationManager.removeUpdates(FPassiveListener);
++    FLocationManager.removeUpdates(FPassiveListener as JLocationListener);
+   if FNetworkListener <> nil then
+-    FLocationManager.removeUpdates(FNetworkListener);
++    FLocationManager.removeUpdates(FNetworkListener as JLocationListener);
+   if FGPSListener <> nil then
+-    FLocationManager.removeUpdates(FGPSListener);
++    FLocationManager.removeUpdates(FGPSListener as JLocationListener);
++  // PATCH: https://quality.embarcadero.com/browse/RSP-35804   END
+ end;
+ 
+ function TUIAndroidLocationSensor.GetAccuracy: TLocationAccuracy;
