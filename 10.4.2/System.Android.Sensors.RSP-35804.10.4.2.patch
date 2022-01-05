@@ -1,5 +1,5 @@
 diff --git "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\rtl\\common\\System.Android.Sensors.pas" "b/Z:\\Patches\\Delphi\\10.4.2\\System.Android.Sensors.pas"
-index 330a6e7..75f33cb 100644
+index 330a6e7..62f3c77 100644
 --- "a/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\rtl\\common\\System.Android.Sensors.pas"	
 +++ "b/Z:\\Patches\\Delphi\\10.4.2\\System.Android.Sensors.pas"
 @@ -95,6 +95,16 @@ type
@@ -41,14 +41,17 @@ index 330a6e7..75f33cb 100644
          procedure onStatusChanged(P1: JString; P2: Integer; P3: JBundle); cdecl;
          procedure onProviderEnabled(P1: JString); cdecl;
          procedure onProviderDisabled(P1: JString); cdecl;
-@@ -978,6 +995,21 @@ begin
+@@ -978,6 +995,24 @@ begin
    FLocationSensor := ALocationSensor;
  end;
  
 +// PATCH: https://quality.embarcadero.com/browse/RSP-35804   BEGIN
 +procedure TUIAndroidLocationSensor.TLocationListener.onLocationChanged(P1: JArrayList);
 +begin
-+  onLocationChanged(TJLocation.Wrap(P1.get(P1.size - 1)));
++  if TJNIResolver.IsInstanceOf(P1, TJLocation.GetClsID) then
++    onLocationChanged(TJLocation.Wrap(P1))
++  else
++    onLocationChanged(TJLocation.Wrap(P1.get(P1.size - 1)));
 +end;
 +
 +procedure TUIAndroidLocationSensor.TLocationListener.onLocationChanged(P1: JObject);
@@ -63,7 +66,7 @@ index 330a6e7..75f33cb 100644
  procedure TUIAndroidLocationSensor.TLocationListener.onLocationChanged(P1: JLocation);
  var
    OldLocation, CurrentLocation: TLocationCoord2D;
-@@ -1033,7 +1065,9 @@ const
+@@ -1033,7 +1068,9 @@ const
    cMinTime = 100;
    cMinDistance = 10;
  begin
@@ -74,7 +77,7 @@ index 330a6e7..75f33cb 100644
  end;
  
  { TUIAndroidLocationSensor }
-@@ -1140,12 +1174,20 @@ end;
+@@ -1140,12 +1177,20 @@ end;
  procedure TUIAndroidLocationSensor.DoStop;
  begin
    inherited;
