@@ -1,0 +1,238 @@
+diff --git "a/C:\\Attracs\\Attracs-Common\\components\\Patches\\DelphiSydney\\Delphi\\Data.DB.pas" "b/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\data\\Data.DB.pas"
+index 92d960e..8528d57 100644
+--- "a/C:\\Attracs\\Attracs-Common\\components\\Patches\\DelphiSydney\\Delphi\\Data.DB.pas"
++++ "b/C:\\Program Files (x86)\\Embarcadero\\Studio\\21.0\\source\\data\\Data.DB.pas"	
+@@ -2,7 +2,7 @@
+ {                                                       }
+ {                Delphi Runtime Library                 }
+ {                                                       }
+-{ Copyright(c) 1995-2020 Embarcadero Technologies, Inc. }
++{ Copyright(c) 1995-2021 Embarcadero Technologies, Inc. }
+ {              All rights reserved                      }
+ {                                                       }
+ {*******************************************************}
+@@ -10,6 +10,7 @@
+ unit Data.DB;
+ 
+ {$R-,T-,H+,X+}
++{$WARN SYMBOL_DEPRECATED OFF}
+ 
+ interface
+ 
+@@ -5699,7 +5700,13 @@ end;
+ 
+ procedure TField.SetEditText(const Value: string);
+ begin
+-  if Assigned(FOnSetText) then FOnSetText(Self, Value) else SetText(Value);
++  if Assigned(FOnSetText) then
++  begin
++    var S: string := Copy(Value, 1);
++    FOnSetText(Self, S);
++  end
++  else
++    SetText(Value);
+ end;
+ 
+ procedure TField.SetFieldKind(Value: TFieldKind);
+@@ -7605,11 +7612,11 @@ end;
+ 
+ procedure TBooleanField.SetAsBoolean(Value: Boolean);
+ var
+-  B: WordBool;
++  B: Word;
+ begin
+-  if Value then Word(B) := 1 else Word(B) := 0;
++  if Value then B := 1 else B := 0;
+   if FIOBuffer <> nil then
+-    TDBBitConverter.UnsafeFrom<WordBool>(B, FIOBuffer);
++    TDBBitConverter.UnsafeFrom<WordBool>(WordBool(B), FIOBuffer);
+   SetData(FIOBuffer);
+ end;
+ 
+@@ -7722,6 +7729,8 @@ begin
+         ftTime: F := FormatSettings.LongTimeFormat;
+       end;
+     DateTimeToString(Text, F, D);
++    if (DataType = ftTime) and (Sign(D) = NegativeValue) then
++      Text := '-' + Text;
+   end else
+     Text := '';
+ end;
+@@ -7760,7 +7769,11 @@ begin
+   begin
+     case DataType of
+       ftDate: DateTime := StrToDate(Value);
+-      ftTime: DateTime := StrToTime(Value);
++      ftTime:
++        if Value[1] = '-' then
++          DateTime := - StrToTime(Copy(Value, 2))
++        else
++          DateTime := StrToTime(Value);
+     else
+       DateTime := StrToDateTime(Value);
+     end;
+@@ -10893,13 +10906,18 @@ begin
+ end;
+ 
+ procedure TParams.Update(Item: TCollectionItem);
++var
++  i: Integer;
+ begin
++  for i := 0 to Count - 1 do
++    Items[i].FParamRef := nil;
+   inherited Update(Item);
+ end;
+ 
+ function TParams.GetItem(Index: Integer): TParam;
+ begin
+   Result := TParam(inherited Items[Index]);
++  Result := Result.ParamRef;
+ end;
+ 
+ procedure TParams.SetItem(Index: Integer; Value: TParam);
+@@ -10922,6 +10940,7 @@ end;
+ function TParams.AddParameter: TParam;
+ begin
+   Result := Add as TParam;
++  Items[Count-1].FParamRef := nil;
+ end;
+ 
+ procedure TParams.AssignTo(Dest: TPersistent);
+@@ -10935,13 +10954,8 @@ var
+   I: Integer;
+   P: TParam;
+ begin
+-  if count = 0 then
+-    exit;
+   for I := 0 to Value.Count - 1 do
+   begin
+-    if (Value.Count = Count) and (AnsiCompareText(GetItem(i).Name, Value[I].Name) = 0) then
+-      p := GetItem(i)
+-    else
+     P := FindParam(Value[I].Name);
+     if P <> nil then
+       P.Assign(Value[I]);
+@@ -11235,8 +11249,6 @@ end;
+ constructor TParam.Create(Collection: TCollection);
+ begin
+   inherited Create(Collection);
+-  fParamRef := nil; // for compiler hint
+-  ParamRef; // for compiler hint
+   ParamType := ptUnknown;
+   DataType := ftUnknown;
+   FSize := 0;
+@@ -11274,7 +11286,11 @@ end;
+ 
+ function TParam.ParamRef: TParam;
+ begin
+-  Result := self;
++  if not Assigned(FParamRef) then
++    if Assigned(Collection) and (Name <> '') then
++      FParamRef := TParams(Collection).ParamByName(Name) else
++      FParamRef := Self;
++  Result := FParamRef;
+ end;
+ 
+ function TParam.GetIsNull: Boolean;
+@@ -11300,12 +11316,12 @@ end;
+ 
+ function TParam.GetParamType: TParamType;
+ begin
+-  Result := FParamType;
++  Result := ParamRef.FParamType;
+ end;
+ 
+ procedure TParam.SetParamType(Value: TParamType);
+ begin
+-  FParamType := Value;
++  ParamRef.FParamType := Value;
+ end;
+ 
+ procedure TParam.SetStream(Stream: TStream; AInstanceOwner: Boolean; KnownSize: Integer);
+@@ -11320,7 +11336,7 @@ end;
+ 
+ function TParam.GetDataType: TFieldType;
+ begin
+-  Result := FDataType;
++  Result := ParamRef.FDataType;
+ end;
+ 
+ procedure TParam.SetDataType(Value: TFieldType);
+@@ -11337,19 +11353,19 @@ const
+ var
+   vType: Integer;
+ begin
+-  FDataType := Value;
+-  if Assigned(DataSet) and (not IsNull) then
++  ParamRef.FDataType := Value;
++  if Assigned(DataSet) and (not ParamRef.IsNull) then
+   begin
+     vType := VarTypeMap[Value];
+     if vType <> varError then
+     try
+-      VarCast(FData, FData, vType);
++      VarCast(ParamRef.FData, ParamRef.FData, vType);
+     except
+-      Clear;
++      ParamRef.Clear;
+     end else
+-      Clear;
++      ParamRef.Clear;
+   end else
+-    Clear;
++    ParamRef.Clear;
+ end;
+ 
+ function TParam.GetDataSize: Integer;
+@@ -12208,6 +12224,8 @@ end;
+ 
+ procedure TParam.SetAsVariant(const Value: Variant);
+ begin
++  if ParamRef = Self then
++  begin
+     FBound := not VarIsClear(Value);
+     FNull := VarIsClear(Value) or VarIsNull(Value);
+     if FDataType = ftUnknown then
+@@ -12239,11 +12257,13 @@ begin
+           FDataType := ftUnknown;
+       end;
+     FData := Value;
++  end else
++    ParamRef.SetAsVariant(Value);
+ end;
+ 
+ function TParam.GetAsVariant: Variant;
+ begin
+-  Result := FData;
++  Result := ParamRef.FData;
+ end;
+ 
+ function TParam.GetAsMemo: string;
+@@ -13379,7 +13399,13 @@ procedure TDataSet.DataConvert(Field: TField; Source: TValueBuffer; var Dest: TV
+         TimeStamp.Date := 0;
+       end;
+     end;
+-    Result := TimeStampToDateTime(TimeStamp);
++    if (DataType = ftTime) and (TimeStamp.Time < 0) then
++    begin
++      TimeStamp.Time := - TimeStamp.Time;
++      Result := - TimeStampToDateTime(TimeStamp);
++    end
++    else
++      Result := TimeStampToDateTime(TimeStamp);
+   end;
+ 
+   function DateTimeToNative(DataType: TFieldType; Data: TDateTime): TDateTimeRec;
+@@ -13389,7 +13415,11 @@ procedure TDataSet.DataConvert(Field: TField; Source: TValueBuffer; var Dest: TV
+     TimeStamp := DateTimeToTimeStamp(Data);
+     case DataType of
+       ftDate: Result.Date := TimeStamp.Date;
+-      ftTime: Result.Time := TimeStamp.Time;
++      ftTime:
++        if Sign(Data) = NegativeValue then
++          Result.Time := - TimeStamp.Time
++        else
++          Result.Time := TimeStamp.Time;
+     else
+       Result.DateTime := TimeStampToMSecs(TimeStamp);
+     end;
